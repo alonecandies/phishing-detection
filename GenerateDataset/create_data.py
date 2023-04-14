@@ -44,11 +44,11 @@ def get_result(threadName):
          results[url] = features
          print("Thread {} trigger {} url remained".format(threadName, resultQueue.qsize()))
          df_last = pd.DataFrame(results.items(), columns=["urls", "features"])
-         df_last.to_csv("chongluadao_dataset.csv", index = False)
+         df_last.to_csv("chongluadao_datasetV2.csv", index = False)
    if(resultQueue.empty()):
       with resultLock:
          print("hahahahahaha")
-         pd.DataFrame(results.items(), columns=["urls", "features"]).to_csv("chongluadao_dataset_final.csv", index = False)
+         pd.DataFrame(results.items(), columns=["urls", "features"]).to_csv("chongluadao_datasetV2_final.csv", index = False)
 
 # result lock
 exitFlag = 0
