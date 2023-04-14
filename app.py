@@ -104,10 +104,12 @@ def feedback():
     today = datetime.utcfromtimestamp(
         int(time.time())).strftime('%Y-%m-%d %H:%M:%S')
     if request.method == "POST":
+        incoming = request.get_json()
         data = {
             "date": today,
-            "url": request.form['url'],
-            "noted": request.form['content'],
+            "url": incoming['url'],
+            "content": incoming['content'],
+            "type": incoming['type']
         }
 
         db.insert_one(data)
