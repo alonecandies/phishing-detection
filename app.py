@@ -141,10 +141,10 @@ def predict():
             prediction = model.predict(url_prepped)
             end = time.time() - start
 
-            if prediction > 0.5:
-                result = "URL is probably phishing"
+            if prediction > 0.4:
+                result = "This website may be phishing"
             else:
-                result = "URL is probably NOT phishing"
+                result = "This website may be safe"
             prediction = float(prediction)
             prediction = prediction * 100
 
@@ -160,10 +160,10 @@ def predict():
         def predictURL(url):
             url_prepped = preprocess_url(url, tokenizer)
             prediction = model.predict(url_prepped, batch_size=256, workers=16, use_multiprocessing=True )
-            if prediction > 0.5:
-                result = "URL is probably phishing"
+            if prediction > 0.4:
+                result = "This website may be phishing"
             else:
-                result = "URL is probably NOT phishing"
+                result = "This website may be safe"
             prediction = float(prediction)
             prediction = prediction * 100
 
