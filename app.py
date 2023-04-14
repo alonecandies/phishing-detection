@@ -18,6 +18,9 @@ from model import ConvModel
 import os
 from GenerateDataset.feature_extraction import Extractor
 from concurrent.futures import ThreadPoolExecutor
+from pymongo import MongoClient
+client = MongoClient("mongodb://localhost:27017")
+db = client["phishing"]["feedback"]
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -102,15 +105,17 @@ def feedback():
         int(time.time())).strftime('%Y-%m-%d %H:%M:%S')
     if request.method == "POST":
         data = {
-            "Date": today,
-            "Title": request.form['title'],
-            "Content": request.form['content'],
+            "date": today,
+            "url": request.form['url'],
+            "noted": request.form['content'],
         }
 
-        json_object = json.dumps(data, indent=4)
+        db.insert_one(data)
 
-        with open('feedback/'+str(time.time()) + "_feedback.json", "x") as f:
-            f.write(json_object)
+        # json_object = json.dumps(data, indent=4)
+
+        # with open('feedback/'+str(time.time()) + "_feedback.json", "x") as f:
+        #     f.write(json_object)
 
         return jsonify(success=True)
 
