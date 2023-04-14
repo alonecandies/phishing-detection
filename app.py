@@ -17,6 +17,7 @@ from model import ConvModel
 # Initialize our Flask application and the Keras model.
 import os
 from GenerateDataset.feature_extraction import Extractor
+from concurrent.futures import ThreadPoolExecutor
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -133,34 +134,76 @@ def predict():
         if (isinstance(url, str)):
             url_prepped = preprocess_url(url, tokenizer)
             prediction = model.predict(url_prepped)
-            ext = Extractor()
-            extResult = ext(url)
             end = time.time() - start
 
             if prediction > 0.5:
                 result = "URL is probably phishing"
             else:
                 result = "URL is probably NOT phishing"
-
-        # Check for base URL. Accuracy is not as great.
-
-        # Processes prediction probability.
             prediction = float(prediction)
             prediction = prediction * 100
-            # map extdetail with criteria to return as object
-            extDetail = {}
-            for i in range(len(extResult)):
-                extDetail[mappingCriteria[i]] = extResult[i]
 
             r = {"result": result, "phishingPercentage": prediction,
-                 "url": url, "detail": extDetail}
+                 "url": url}
             data["predictions"].append(r)
 
             # Show that the request was a success.
             data["success"] = True
             data["time_elapsed"] = end
 
+        # Check for base URL. Accuracy is not as great.
+        def predictURL(url):
+            url_prepped = preprocess_url(url, tokenizer)
+            prediction = model.predict(url_prepped, batch_size=256, workers=16, use_multiprocessing=True )
+            if prediction > 0.5:
+                result = "URL is probably phishing"
+            else:
+                result = "URL is probably NOT phishing"
+            prediction = float(prediction)
+            prediction = prediction * 100
+
+            r = {"result": result, "phishingPercentage": prediction,
+                 "url": url}
+            return r
+        if (isinstance(url, list)):
+            with ThreadPoolExecutor(max_workers=64) as executor:
+                for result in executor.map(predictURL, url):
+                    data["predictions"].append(result)
+
+            end = time.time() - start
+            # Show that the request was a success.
+            data["success"] = True
+            data["time_elapsed"] = end
+
     # Return the data as a JSON response.
+        return jsonify(data)
+    else:
+        return jsonify({'message': 'Send me something'})
+
+
+@app.route("/detail", methods=["GET", "POST"])
+def detail():
+    data = {"success": False}
+    if request.method == "POST":
+        start = time.time()
+        incoming = request.get_json()
+        url = incoming["url"]
+
+        if url == '':
+            return jsonify({'message': 'Maybe your input not correct'})
+
+        ext = Extractor()
+        if (isinstance(url, str)):
+            extResult = ext(url)
+            end = time.time() - start
+
+            # map extdetail with criteria to return as object
+            extDetail = {}
+            for i in range(len(extResult)):
+                extDetail[mappingCriteria[i]] = extResult[i]
+            data['detail'] = extDetail
+            data["success"] = True
+            data["time_elapsed"] = end
         return jsonify(data)
     else:
         return jsonify({'message': 'Send me something'})
