@@ -86,15 +86,15 @@ def predict():
 
         data["predictions"] = []
         if (isinstance(url, str)):
-            isAccessible, url, page = is_URL_accessible(url)
-            if not isAccessible:
-                return jsonify({'message': 'Sorry, we can not analyze this URL for now'})
             extracted_domain = tldextract.extract(url)
             domain = extracted_domain.domain+'.'+extracted_domain.suffix
             if whitelist.find_one({'url': domain}) is not None:
                 return jsonify({"predictions": [{'result': 'This website may be safe', 'phishingPercentage': 0, 'url': url}]})
             if blackList.find_one({'url': domain}) is not None:
                 return jsonify({"predictions": [{'result': 'This website may be phishing', 'phishingPercentage': 100, 'url': url}]})
+            isAccessible, url, page = is_URL_accessible(url)
+            if not isAccessible:
+                return jsonify({'message': 'Sorry, we can not analyze this URL for now'})
             # cursor = dataset.find_one({'url': url})
             # if cursor is not None:
             #     features = []
