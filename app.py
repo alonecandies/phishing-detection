@@ -55,46 +55,46 @@ mappingCriteria = ['haveIP', 'haveAt', 'URLLength', 'URLDepth', 'redirection',
                    'domainAge', 'domainEnd', 'iFrame', 'mouseOver', 'rightClick', 'webForwards', 'punnyCode']
 
 
-@app.route('/survey', methods=["GET", "POST"])
-def survey():
+# @app.route('/survey', methods=["GET", "POST"])
+# def survey():
 
-    features = {
-        'Chứa địa chỉ IP trong URL': 'Các trang web lừa đảo thường không đăng ký tên miền thay vào đó là sử dụng nguyên IP vì vậy hãy cẩn thận',
-        'Chứa ký tự @ trong URL': 'Dấu @ có tác dụng bỏ quả tất cả ký tự xuất hiện trước nó (VD: http://totally-legit-site.com@192.168.50.20/account sẽ đưa nạn nhân đến trang 192.168.50.20/account là trang web lửa đảo',
-        'Địa chỉ trang web chứa nhiều path': 'Tìm kiếm điểm chung của trang web lừa đảo giựa vào số đường dẫn có trong url',
-        'Có ký tự // trong tên miền': 'Ký tự // nằm trong đường dẫn nhằm chuyển hướng người dùng đến trang web lừa đảo',
-        'HTTPS hoặc HTTP trong tên miền': 'sử dụng https trong domain khiến người dùng nhìn nhầm và chủ quan (VD: http:https://vietcombank.com.vn)',
-        'Sử dụng địa chỉ rút gọn': 'Sử dụng địa chỉ rút gọn như bit.ly để giấu đi địa chỉ thật sự của trang web lừa đảo',
-        'Có chứa ký tự - trong domain': 'sử dụng ký tự - trong tên miền khiến tên trang web nhìn "có vẻ" không lừa đảo',
-        'Kiểm tra xem DNS có nhận được website không': 'Kiểm tra xem DNS có trỏ đến được trang web không, nếu không thì trang web đó được đăng ký với dịch vụ không rõ ràng',
-        'Tuổi thọ của tên miền có dưới 6 tháng': 'Nhưng trang web lừa đảo thường bị báo cáo liên tục đẫn đến việc gỡ xuống và nhưng tên lừa đảo thường không hay bỏ chi phí duy trì server nên tuổi thọ thường rất ngắn',
-        'Tên miền đã hết hạn': 'Tên miền đã hết hạn đăng ký',
-        'Website có sử dụng Iframe': 'Sử dụng Iframe chạy chầm trong các trang web để ăn cắp thông tin cá nhân',
-        'Website có sử dụng Mouse_Over': 'Sử dụng hàm mouse_over trong javscript để khi người dùng đung đưa con chuột qua 1 cái link bất kỳ trang web lừa đảo sẽ tự động bật lên',
-        'Website tắt chức năng Right_Click': 'Trang web vô hiệu hóa chuột phải vì lo sợ ta sẽ nhìn thấy những đoạn mã độc trong trang web',
-        'Sô lần bị forward có quá 2 lần khi vào trang web': 'Khi vào 1 trang web số lần ta bị tự động forward quá nhiều nhằm qua mặt các công cụ quét',
-        'Địa chỉ Website có chứa punny code': 'Sử dụng punnycode để đánh lừa url (VD: dı sẽ nhìn khá giống với di nhưng punnycode của adıdas.de là trang web lừa đảo với đủ ký tự là http://xn--addas-o4a.de/ nhưng trình duyệt sẽ encode và hiển thị giống như là adidas.de'
-    }
-    sublist = [list(features.keys())[n:n+3]
-               for n in range(0, len(list(features.keys())), 3)]
-    if request.method == "POST" and request.form['url'] != None:
-        url = request.form['url']
+#     features = {
+#         'Chứa địa chỉ IP trong URL': 'Các trang web lừa đảo thường không đăng ký tên miền thay vào đó là sử dụng nguyên IP vì vậy hãy cẩn thận',
+#         'Chứa ký tự @ trong URL': 'Dấu @ có tác dụng bỏ quả tất cả ký tự xuất hiện trước nó (VD: http://totally-legit-site.com@192.168.50.20/account sẽ đưa nạn nhân đến trang 192.168.50.20/account là trang web lửa đảo',
+#         'Địa chỉ trang web chứa nhiều path': 'Tìm kiếm điểm chung của trang web lừa đảo giựa vào số đường dẫn có trong url',
+#         'Có ký tự // trong tên miền': 'Ký tự // nằm trong đường dẫn nhằm chuyển hướng người dùng đến trang web lừa đảo',
+#         'HTTPS hoặc HTTP trong tên miền': 'sử dụng https trong domain khiến người dùng nhìn nhầm và chủ quan (VD: http:https://vietcombank.com.vn)',
+#         'Sử dụng địa chỉ rút gọn': 'Sử dụng địa chỉ rút gọn như bit.ly để giấu đi địa chỉ thật sự của trang web lừa đảo',
+#         'Có chứa ký tự - trong domain': 'sử dụng ký tự - trong tên miền khiến tên trang web nhìn "có vẻ" không lừa đảo',
+#         'Kiểm tra xem DNS có nhận được website không': 'Kiểm tra xem DNS có trỏ đến được trang web không, nếu không thì trang web đó được đăng ký với dịch vụ không rõ ràng',
+#         'Tuổi thọ của tên miền có dưới 6 tháng': 'Nhưng trang web lừa đảo thường bị báo cáo liên tục đẫn đến việc gỡ xuống và nhưng tên lừa đảo thường không hay bỏ chi phí duy trì server nên tuổi thọ thường rất ngắn',
+#         'Tên miền đã hết hạn': 'Tên miền đã hết hạn đăng ký',
+#         'Website có sử dụng Iframe': 'Sử dụng Iframe chạy chầm trong các trang web để ăn cắp thông tin cá nhân',
+#         'Website có sử dụng Mouse_Over': 'Sử dụng hàm mouse_over trong javscript để khi người dùng đung đưa con chuột qua 1 cái link bất kỳ trang web lừa đảo sẽ tự động bật lên',
+#         'Website tắt chức năng Right_Click': 'Trang web vô hiệu hóa chuột phải vì lo sợ ta sẽ nhìn thấy những đoạn mã độc trong trang web',
+#         'Sô lần bị forward có quá 2 lần khi vào trang web': 'Khi vào 1 trang web số lần ta bị tự động forward quá nhiều nhằm qua mặt các công cụ quét',
+#         'Địa chỉ Website có chứa punny code': 'Sử dụng punnycode để đánh lừa url (VD: dı sẽ nhìn khá giống với di nhưng punnycode của adıdas.de là trang web lừa đảo với đủ ký tự là http://xn--addas-o4a.de/ nhưng trình duyệt sẽ encode và hiển thị giống như là adidas.de'
+#     }
+#     sublist = [list(features.keys())[n:n+3]
+#                for n in range(0, len(list(features.keys())), 3)]
+#     if request.method == "POST" and request.form['url'] != None:
+#         url = request.form['url']
 
-        if url == '':
-            return jsonify({'notvalid': 'Maybe your input not correct'})
+#         if url == '':
+#             return jsonify({'notvalid': 'Maybe your input not correct'})
 
-        if (isinstance(url, str)):
-            url_prepped = preprocess_url(url, tokenizer)
-            prediction = model.predict(url_prepped)
+#         if (isinstance(url, str)):
+#             url_prepped = preprocess_url(url, tokenizer)
+#             prediction = model.predict(url_prepped)
 
-            if prediction > 0.5:
-                return jsonify({'notsafe': 'Website Phishing ', 'score': str(prediction[0][0])})
-            else:
-                return jsonify({'safe': 'Website Legitimate', 'score': str(prediction[0][0])})
+#             if prediction > 0.5:
+#                 return jsonify({'notsafe': 'Website Phishing ', 'score': str(prediction[0][0])})
+#             else:
+#                 return jsonify({'safe': 'Website Legitimate', 'score': str(prediction[0][0])})
 
-        # return render_template('index.html',data=sublist,features=features)
+#         # return render_template('index.html',data=sublist,features=features)
 
-    return render_template('index.html', data=sublist, features=features)
+#     return render_template('index.html', data=sublist, features=features)
 
 
 @app.route("/feedback", methods=["GET", "POST"])
