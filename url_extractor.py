@@ -45,21 +45,20 @@ def is_URL_accessible(url):
     # url = parsed.scheme+'://'+parsed.netloc
     page = None
     try:
-        page = requests.get(url, timeout=2)
+        if not url.startswith("https://"):
+            page = requests.get('https://'+url, timeout=1)
+            url = "https://"+url
+        else:
+            page = requests.get(url, timeout=1)
     except:
         # parsed = urlparse(url)
         # url = parsed.scheme+'://'+parsed.netloc
-        if not url.startswith("https://"):
+        if not url.startswith("http://"):
             try:
-                page = requests.get('https://'+url, timeout=2)
-                url = "https://"+url
+                page = requests.get('http://'+url, timeout=1)
+                url = "http://"+url
             except:
-                if not url.startswith("http://"):
-                    try:
-                        page = requests.get('http://'+url, timeout=2)
-                        url = "http://"+url
-                    except:
-                        pass
+                pass
 
         # if not parsed.netloc.startswith('www'):
         #     url = parsed.scheme+'://www.'+parsed.netloc
