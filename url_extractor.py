@@ -6,8 +6,6 @@ import json
 import csv
 import os
 import re
-from urllib.parse import urlparse, urlencode
-import whois
 
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
@@ -36,24 +34,36 @@ HINTS = ['wp', 'login', 'includes', 'admin', 'content', 'site', 'images', 'js', 
 #     return decorate
 
 # @deadline(5)
-def is_URL_accessible(url):
-
+def is_URL_accessible(url): 
     #iurl = url
     #parsed = urlparse(url)
     #url = parsed.scheme+'://'+parsed.netloc
     page = None
     try:
-        page = requests.get(url, timeout=5)  
+        page = requests.get(url, timeout=1)  
     except:
-        parsed = urlparse(url)
-        url = parsed.scheme+'://'+parsed.netloc
-        if not parsed.netloc.startswith('www'):
-            url = parsed.scheme+'://www.'+parsed.netloc
+        # parsed = urlparse(url)
+        # url = parsed.scheme+'://'+parsed.netloc
+        if not url.startswith("https://"):
             try:
-                page = requests.get(url, timeout=5)
+                page = requests.get('https://'+url, timeout=1)
+                url = "https://"+url
             except:
-                page = None
-                pass
+                if not url.startswith("https://"):
+                    try:
+                        page = requests.get('http://'+url, timeout=1)
+                        url = "http://"+url
+                    except:
+                        pass
+
+
+        # if not parsed.netloc.startswith('www'):
+        #     url = parsed.scheme+'://www.'+parsed.netloc
+        #     try:
+        #         page = requests.get(url, timeout=5)
+        #     except:
+        #         page = None
+        #         pass
         # if not parsed.netloc.startswith('www'):
         #     url = parsed.scheme+'://www.'+parsed.netloc
         #     #iurl = iurl.replace('https://', 'https://www.')
@@ -73,7 +83,7 @@ def is_URL_accessible(url):
         #         #         except:
         #         #             pass
         #         pass 
-    if page and page.status_code == 200 and page.content not in ["b''", "b' '"]:
+    if page and page.status_code <= 301 and page.content not in ["b''", "b' '"]:
         return True, url, page
     else:
         return False, None, None
@@ -212,7 +222,7 @@ def domain_age(domain):
     else:
         creation_date = domain_name.creation_date
 
-    if type(domain_name.creation_date)==list:
+    if type(domain_name.expiration_date)==list:
         expiration_date = domain_name.expiration_date[0]
     else:
         expiration_date = domain_name.expiration_date  
@@ -235,7 +245,6 @@ from urllib.parse import urlencode
 
 def google_index(url):
     #time.sleep(.6)
-    print(6)
     user_agent =  'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36'
     headers = {'User-Agent' : user_agent}
     query = {'q': 'site:' + url}
@@ -259,7 +268,6 @@ def google_index(url):
 def page_rank(domain):
   
     url = 'https://openpagerank.com/api/v1.0/getPageRank?domains%5B0%5D=' + domain
-    print(7)
     try:
         request = requests.get(url, headers={'API-OPR':'g0g8k0k44g0cggkokckkgw0gws88wcw0k4s8gg8c'})
         result = request.json()
@@ -281,8 +289,6 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
     for href in soup.find_all('a', href=True):
         dots = [x.start(0) for x in re.finditer('\.', href['href'])]
         if hostname in href['href'] or domain in href['href'] or len(dots) == 1 or not href['href'].startswith('http'):
-            if "#" in href['href'] or "javascript" in href['href'].lower() or "mailto" in href['href'].lower():
-                 Anchor['unsafe'].append(href['href']) 
             if not href['href'].startswith('http'):
                 if not href['href'].startswith('/'):
                     Href['internals'].append(hostname+'/'+href['href']) 
@@ -292,7 +298,7 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
                     Href['internals'].append(hostname+href['href'])   
         else:
             Href['externals'].append(href['href'])
-            Anchor['safe'].append(href['href'])
+    
 
     # collect all media src tags
     for img in soup.find_all('img', src=True):
@@ -351,6 +357,7 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
 
     # collect all link tags
     for link in soup.findAll('link', href=True):
+        print(link)
         dots = [x.start(0) for x in re.finditer('\.', link['href'])]
         if hostname in link['href'] or domain in link['href'] or len(dots) == 1 or not link['href'].startswith('http'):
             if not link['href'].startswith('http'):
@@ -372,9 +379,10 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
                 elif script['src'] in Null_format:
                     Link['null'].append(script['src'])  
                 else:
-                    Link['internals'].append(hostname+script['src'])   
+                    Link['internals'].append(hostname+script['src'])
         else:
-            Link['externals'].append(link['href'])
+            Link['externals'].append(script['href'])   
+
            
             
     # collect all css
@@ -477,6 +485,7 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
     
     return Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text
 
+
 def url_row(url, page, hostname, domain, path, words_raw, words_raw_host, words_raw_path, tld, subdomain,Href, Link, Media, Form, CSS, Favicon, Title):
         row = [
             url,
@@ -498,13 +507,11 @@ def url_row(url, page, hostname, domain, path, words_raw, words_raw_host, words_
             internal_hyperlinks(Href, Link, Media, Form, CSS, Favicon), 
             empty_title(Title),
             domain_in_title(hostname, Title),
-            domain_age(domain),
-            google_index(url),
+            # domain_age(domain),
+            # google_index(url),
             page_rank(domain),
             None
         ]
-
-        print(row)
         return row
 
 def url_extractor(url):
@@ -518,7 +525,7 @@ def url_extractor(url):
     IFrame = {'visible':[], 'invisible':[], 'null':[]}
     Title =''
     Text= ''
-    state, iurl, page = is_URL_accessible(url)
+    state, url, page = is_URL_accessible(url)
     if state:
         
         content = page.content
@@ -531,9 +538,11 @@ def url_extractor(url):
         path = pth[1] + pth[2]
         words_raw, words_raw_host, words_raw_path= words_raw_extraction(extracted_domain.domain, subdomain, pth[2])
         tld = extracted_domain.suffix
-
-        Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text = extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text)
-        
+        try:
+            Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text = extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text)
+        except:
+            pass
         res = url_row(url, page, hostname, domain, path, words_raw, words_raw_host, words_raw_path, tld, subdomain, Href, Link, Media, Form, CSS, Favicon, Title)
 
         return res
+    return 1
