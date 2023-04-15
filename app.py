@@ -3,56 +3,49 @@
 This is the Flask REST API that processes and outputs the prediction on the URL.
 """
 import numpy as np
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.preprocessing.text import Tokenizer
-import tensorflow as tf
-# import label_data
+import pickle
 from flask import Flask, redirect, url_for, render_template, request, jsonify
 import json
 import pickle
-import joblib
 import time
-from model import ConvModel
-# Initialize our Flask application and the Keras model.
+from sklearn.ensemble import RandomForestClassifier
 import os
-from GenerateDataset.feature_extraction import Extractor
+from url_extractor import url_extractor, is_URL_accessible
 from concurrent.futures import ThreadPoolExecutor
 from pymongo import MongoClient
 client = MongoClient("mongodb://localhost:27017")
-db = client["phishing"]["feedback"]
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-with open('tokenizer.pickle', 'rb') as handle:
-    tokenizer = pickle.load(handle)
-num_chars = len(tokenizer.word_index)+1
-embedding_vector_length = 128
-maxlen = 128
-max_words = 20000\
-
-with tf.device('/cpu:0'):
-    model_pre = "./checkpointModel/bestModelCNN"
-    model = ConvModel(num_chars, embedding_vector_length, maxlen)
-    model.built = True
-    model.load_weights(model_pre)
+db = client["phishing"]
+blackList = db["blacklist"]
+whitelist = db["whiteList"]
 
 app = Flask(__name__)
 app.config["CACHE_TYPE"] = "null"
 
+model = None
+with open('./checkpointModel/model_phishing_webpage_classifer', 'rb') as file:
+    model = pickle.load(file)
 
-def preprocess_url(url, tokenizer):
-    url = url.strip()
-    sequences = tokenizer.texts_to_sequences([url])
-    word_index = tokenizer.word_index
-    url_prepped = pad_sequences(sequences, maxlen=maxlen)
-
-    return url_prepped
-
-
-mappingCriteria = ['haveIP', 'haveAt', 'URLLength', 'URLDepth', 'redirection',
-                   'httpsDomain', 'tinyURL', 'prefixSuffix', 'DNSRecord', 'webTraffic',
-                   'domainAge', 'domainEnd', 'iFrame', 'mouseOver', 'rightClick', 'webForwards', 'punnyCode']
+    mappingCriteria = ['length_url',
+                       'length_hostname',
+                       'ip',
+                       'nb_dots',
+                       'nb_qm',
+                       'nb_eq',
+                       'nb_slash',
+                       'nb_www',
+                       'ratio_digits_url',
+                       'ratio_digits_host',
+                       'tld_in_subdomain',
+                       'prefix_suffix',
+                       'shortest_word_host',
+                       'longest_words_raw',
+                       'longest_word_path',
+                       'phish_hints',
+                       'nb_hyperlinks',
+                       'ratio_intHyperlinks',
+                       'empty_title',
+                       'domain_in_title',
+                       'page_rank']
 
 
 # @app.route('/survey', methods=["GET", "POST"])
@@ -112,12 +105,7 @@ def feedback():
             "type": incoming['type']
         }
 
-        db.insert_one(data)
-
-        # json_object = json.dumps(data, indent=4)
-
-        # with open('feedback/'+str(time.time()) + "_feedback.json", "x") as f:
-        #     f.write(json_object)
+        db["feedback"].insert_one(data)
 
         return jsonify(success=True)
 
@@ -139,8 +127,12 @@ def predict():
 
         data["predictions"] = []
         if (isinstance(url, str)):
-            url_prepped = preprocess_url(url, tokenizer)
-            prediction = model.predict(url_prepped)
+            if not is_URL_accessible(url):
+                return jsonify({'message': 'Sorry, we can not analyze this URL for now'})
+            extractLink = url_extractor(url)
+            if (extractLink == []):
+                return jsonify({'message': 'Sorry, we can not analyze this URL for now'})
+            prediction = model.predict_proba([extractLink])[0][1]
             end = time.time() - start
 
             if prediction > 0.4:
@@ -149,71 +141,97 @@ def predict():
                 result = "This website may be safe"
             prediction = float(prediction)
             prediction = prediction * 100
+            extDetail = {}
+            for i in range(len(extractLink)):
+                extDetail[mappingCriteria[i]] = extractLink[i]
 
             r = {"result": result, "phishingPercentage": prediction,
-                 "url": url}
+                 "url": url, "detail": extDetail}
             data["predictions"].append(r)
 
             # Show that the request was a success.
             data["success"] = True
             data["time_elapsed"] = end
 
-        # Check for base URL. Accuracy is not as great.
-        def predictURL(url):
-            url_prepped = preprocess_url(url, tokenizer)
-            prediction = model.predict(url_prepped, batch_size=256, workers=16, use_multiprocessing=True )
-            if prediction > 0.4:
-                result = "This website may be phishing"
-            else:
-                result = "This website may be safe"
-            prediction = float(prediction)
-            prediction = prediction * 100
+        else:
+            # Check for base URL. Accuracy is not as great.
+            def extractURL(url):
+                if not is_URL_accessible(url):
+                    return []
+                return url_extractor(url)
 
-            r = {"result": result, "phishingPercentage": prediction,
-                 "url": url}
-            return r
-        if (isinstance(url, list)):
-            with ThreadPoolExecutor(max_workers=64) as executor:
-                for result in executor.map(predictURL, url):
-                    data["predictions"].append(result)
+            def predictURL(feat):
+                rel = []
+                if feat == []:
+                    return rel
+                try:
+                    rel = model.predict_proba([feat])
+                except:
+                    rel = []
+                return rel
+            if (isinstance(url, list)):
+                listURLExtracted = []
+                prediction = []
+                with ThreadPoolExecutor(max_workers=16) as executor:
+                    for result in executor.map(extractURL, url):
+                        listURLExtracted.append(result)
+                with ThreadPoolExecutor(max_workers=16) as executor:
+                    for result in executor.map(predictURL, listURLExtracted):
+                        prediction.append(result)
+                for i, pred in enumerate(prediction):
+                    if pred == []:
+                        data["predictions"].append(
+                            {"message": "Sorry, we can not analyze this URL for now", "url": url[i]})
+                        continue
+                    if pred[0][1] > 0.4:
+                        result = "This website may be phishing"
+                    else:
+                        result = "This website may be safe"
+                    pred = float(pred[0][1])
+                    pred = pred * 100
+                    extDetail = {}
+                    for j in range(len(listURLExtracted[i])):
+                        extDetail[mappingCriteria[j]] = listURLExtracted[i][j]
+                    r = {"result": result, "phishingPercentage": pred,
+                         "url": url[i], "detail": extDetail}
+                    data["predictions"].append(r)
+                end = time.time() - start
+                # Show that the request was a success.
+                data["success"] = True
+                data["time_elapsed"] = end
 
-            end = time.time() - start
-            # Show that the request was a success.
-            data["success"] = True
-            data["time_elapsed"] = end
-
-    # Return the data as a JSON response.
+        # Return the data as a JSON response.
         return jsonify(data)
     else:
         return jsonify({'message': 'Send me something'})
 
 
-@app.route("/detail", methods=["GET", "POST"])
-def detail():
-    data = {"success": False}
-    if request.method == "POST":
-        start = time.time()
-        incoming = request.get_json()
-        url = incoming["url"]
+# @app.route("/detail", methods=["GET", "POST"])
+# def detail():
+#     data = {"success": False}
+#     if request.method == "POST":
+#         start = time.time()
+#         incoming = request.get_json()
+#         url = incoming["url"]
 
-        if url == '':
-            return jsonify({'message': 'Maybe your input not correct'})
+#         if url == '':
+#             return jsonify({'message': 'Maybe your input not correct'})
 
-        ext = Extractor()
-        if (isinstance(url, str)):
-            extResult = ext(url)
-            end = time.time() - start
+#         ext = Extractor()
+#         if (isinstance(url, str)):
+#             extResult = ext(url)
+#             end = time.time() - start
 
-            # map extdetail with criteria to return as object
-            extDetail = {}
-            for i in range(len(extResult)):
-                extDetail[mappingCriteria[i]] = extResult[i]
-            data['detail'] = extDetail
-            data["success"] = True
-            data["time_elapsed"] = end
-        return jsonify(data)
-    else:
-        return jsonify({'message': 'Send me something'})
+#             # map extdetail with criteria to return as object
+#             extDetail = {}
+#             for i in range(len(extResult)):
+#                 extDetail[mappingCriteria[i]] = extResult[i]
+#             data['detail'] = extDetail
+#             data["success"] = True
+#             data["time_elapsed"] = end
+#         return jsonify(data)
+#     else:
+#         return jsonify({'message': 'Send me something'})
 
 
 # Start the server.
