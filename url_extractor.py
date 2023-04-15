@@ -90,7 +90,7 @@ def is_URL_accessible(url):
     if page and page.status_code <= 301 and page.content not in ["b''", "b' '"]:
         return True, url, page
     else:
-        return False, None, None
+        return False, url, None
 
 
 def words_raw_extraction(domain, subdomain, path):
@@ -303,8 +303,9 @@ def page_rank(domain):
 def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text):
     Null_format = ["", "#", "#nothing", "#doesnotexist", "#null", "#void", "#whatever",
                    "#content", "javascript::void(0)", "javascript::void(0);", "javascript::;", "javascript"]
-    try: 
-        soup = BeautifulSoup(content, 'html.parser', from_encoding='iso-8859-1')
+    try:
+        soup = BeautifulSoup(content, 'html.parser',
+                             from_encoding='iso-8859-1')
 
         # collect all external and internal hrefs from url
         for href in soup.find_all('a', href=True):
@@ -375,7 +376,6 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
 
         # collect all link tags
         for link in soup.findAll('link', href=True):
-            print(link)
             dots = [x.start(0) for x in re.finditer('\.', link['href'])]
             if hostname in link['href'] or domain in link['href'] or len(dots) == 1 or not link['href'].startswith('http'):
                 if not link['href'].startswith('http'):
@@ -451,7 +451,8 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
         # collect all link tags
         for head in soup.find_all('head'):
             for head.link in soup.find_all('link', href=True):
-                dots = [x.start(0) for x in re.finditer('\.', head.link['href'])]
+                dots = [x.start(0)
+                        for x in re.finditer('\.', head.link['href'])]
                 if hostname in head.link['href'] or len(dots) == 1 or domain in head.link['href'] or not head.link['href'].startswith('http'):
                     if not head.link['href'].startswith('http'):
                         if not head.link['href'].startswith('/'):
@@ -460,7 +461,8 @@ def extract_data_from_URL(hostname, content, domain, Href, Link, Anchor, Media, 
                         elif head.link['href'] in Null_format:
                             Favicon['null'].append(head.link['href'])
                         else:
-                            Favicon['internals'].append(hostname+head.link['href'])
+                            Favicon['internals'].append(
+                                hostname+head.link['href'])
                 else:
                     Favicon['externals'].append(head.link['href'])
 
@@ -534,7 +536,7 @@ def url_row(url, page, hostname, domain, path, words_raw, words_raw_host, words_
     return row
 
 
-def url_extractor(url):
+def url_extractor(url, page):
     Href = {'internals': [], 'externals': [], 'null': []}
     Link = {'internals': [], 'externals': [], 'null': []}
     Anchor = {'safe': [], 'unsafe': [], 'null': []}
@@ -545,25 +547,21 @@ def url_extractor(url):
     IFrame = {'visible': [], 'invisible': [], 'null': []}
     Title = ''
     Text = ''
-    state, url, page = is_URL_accessible(url)
-    if state:
-        content = page.content
-        hostname, path = get_domain(url)
-        extracted_domain = tldextract.extract(url)
-        domain = extracted_domain.domain+'.'+extracted_domain.suffix
-        subdomain = extracted_domain.subdomain
-        tmp = url[url.find(extracted_domain.suffix):len(url)]
-        pth = tmp.partition("/")
-        path = pth[1] + pth[2]
-        words_raw, words_raw_host, words_raw_path = words_raw_extraction(
-            extracted_domain.domain, subdomain, pth[2])
-        tld = extracted_domain.suffix
+    content = page.content
+    hostname, path = get_domain(url)
+    extracted_domain = tldextract.extract(url)
+    domain = extracted_domain.domain+'.'+extracted_domain.suffix
+    subdomain = extracted_domain.subdomain
+    tmp = url[url.find(extracted_domain.suffix):len(url)]
+    pth = tmp.partition("/")
+    path = pth[1] + pth[2]
+    words_raw, words_raw_host, words_raw_path = words_raw_extraction(
+        extracted_domain.domain, subdomain, pth[2])
+    tld = extracted_domain.suffix
 
-        Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text = extract_data_from_URL(
-            hostname, content, domain, Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text)
+    Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text = extract_data_from_URL(
+        hostname, content, domain, Href, Link, Anchor, Media, Form, CSS, Favicon, IFrame, Title, Text)
 
-        res = url_row(url, page, hostname, domain, path, words_raw, words_raw_host,
-                      words_raw_path, tld, subdomain, Href, Link, Media, Form, CSS, Favicon, Title)
-        return res
-    else:
-        return []
+    res = url_row(url, page, hostname, domain, path, words_raw, words_raw_host,
+                  words_raw_path, tld, subdomain, Href, Link, Media, Form, CSS, Favicon, Title)
+    return res

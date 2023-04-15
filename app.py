@@ -13,10 +13,11 @@ import os
 from url_extractor import url_extractor, is_URL_accessible
 from concurrent.futures import ThreadPoolExecutor
 from pymongo import MongoClient
+import tldextract
 client = MongoClient("mongodb://localhost:27017")
 db = client["phishing"]
 blackList = db["blacklist"]
-whitelist = db["whiteList"]
+whitelist = db["whitelist"]
 
 app = Flask(__name__)
 app.config["CACHE_TYPE"] = "null"
@@ -127,9 +128,16 @@ def predict():
 
         data["predictions"] = []
         if (isinstance(url, str)):
-            if not is_URL_accessible(url):
+            isAccessible, url, page = is_URL_accessible(url)
+            if not isAccessible:
                 return jsonify({'message': 'Sorry, we can not analyze this URL for now'})
-            extractLink = url_extractor(url)
+            extracted_domain = tldextract.extract(url)
+            domain = extracted_domain.domain+'.'+extracted_domain.suffix
+            if whitelist.find_one({'url': domain}) is not None:
+                return jsonify({"predictions": [{'result': 'This website may be safe', 'phishingPercentage': 0, 'url': url}]})
+            if blackList.find_one({'url': domain}) is not None:
+                return jsonify({"predictions": [{'result': 'This website may be phishing', 'phishingPercentage': 100, 'url': url}]})
+            extractLink = url_extractor(url, page)
             if (extractLink == []):
                 return jsonify({'message': 'Sorry, we can not analyze this URL for now'})
             prediction = model.predict_proba([extractLink])[0][1]
@@ -154,53 +162,65 @@ def predict():
             data["time_elapsed"] = end
 
         else:
-            # Check for base URL. Accuracy is not as great.
-            def extractURL(url):
-                if not is_URL_accessible(url):
-                    return []
-                return url_extractor(url)
-
-            def predictURL(feat):
-                rel = []
-                if feat == []:
-                    return rel
-                try:
-                    rel = model.predict_proba([feat])
-                except:
-                    rel = []
-                return rel
             if (isinstance(url, list)):
                 listURLExtracted = []
                 prediction = []
-                with ThreadPoolExecutor(max_workers=16) as executor:
-                    for result in executor.map(extractURL, url):
-                        listURLExtracted.append(result)
-                with ThreadPoolExecutor(max_workers=16) as executor:
-                    for result in executor.map(predictURL, listURLExtracted):
-                        prediction.append(result)
-                for i, pred in enumerate(prediction):
-                    if pred == []:
-                        data["predictions"].append(
-                            {"message": "Sorry, we can not analyze this URL for now", "url": url[i]})
+                pages = []
+                for urlItem in url.copy():
+                    isAccessible, newURL, page = is_URL_accessible(urlItem)
+                    url[url.index(urlItem)] = newURL
+                    pages.append(page)
+                    if not isAccessible:
+                        data['predictions'].append(
+                            {'message': 'Sorry, we can not analyze this URL for now', 'url': newURL})
+                        url.remove(newURL)
+                        pages.remove(page)
                         continue
-                    if pred[0][1] > 0.4:
-                        result = "This website may be phishing"
-                    else:
-                        result = "This website may be safe"
-                    pred = float(pred[0][1])
-                    pred = pred * 100
-                    extDetail = {}
-                    for j in range(len(listURLExtracted[i])):
-                        extDetail[mappingCriteria[j]] = listURLExtracted[i][j]
-                    r = {"result": result, "phishingPercentage": pred,
-                         "url": url[i], "detail": extDetail}
-                    data["predictions"].append(r)
-                end = time.time() - start
-                # Show that the request was a success.
-                data["success"] = True
-                data["time_elapsed"] = end
+                    extracted_domain = tldextract.extract(newURL)
+                    domain = extracted_domain.domain+'.'+extracted_domain.suffix
+                    if whitelist.find_one({"url": domain}) is not None:
+                        data['predictions'].append(
+                            {'result': 'This website may be safe', 'phishingPercentage': 0, 'url': newURL})
+                        url.remove(newURL)
+                        pages.remove(page)
+                        continue
+                    if blackList.find_one({"url": domain}) is not None:
+                        data['predictions'].append(
+                            {'result': 'This website may be phishing', 'phishingPercentage': 100, 'url': newURL})
+                        url.remove(newURL)
+                        pages.remove(page)
+                        continue
+                if not url == []:
+                    def extractURL(i):
+                        return url_extractor(url[i], pages[i])
 
-        # Return the data as a JSON response.
+                    def predictProbabilities(feat):
+                        return model.predict_proba([feat])
+                    indexList = [i for i in range(len(url))]
+                    with ThreadPoolExecutor(max_workers=18) as executor:
+                        for result in executor.map(extractURL, indexList):
+                            listURLExtracted.append(result)
+                    with ThreadPoolExecutor(max_workers=18) as executor:
+                        for result in executor.map(predictProbabilities, listURLExtracted):
+                            prediction.append(result)
+                    for i, pred in enumerate(prediction):
+                        if pred[0][1] > 0.4:
+                            result = "This website may be phishing"
+                        else:
+                            result = "This website may be safe"
+                        prediction = float(pred[0][1])
+                        prediction = prediction * 100
+                        extDetail = {}
+                        for j in range(len(listURLExtracted[i])):
+                            extDetail[mappingCriteria[j]
+                                      ] = listURLExtracted[i][j]
+
+                        r = {"result": result, "phishingPercentage": prediction,
+                             "url": url[i], "detail": extDetail}
+                        data["predictions"].append(r)
+                    end = time.time() - start
+                    data["success"] = True
+                    data["time_elapsed"] = end
         return jsonify(data)
     else:
         return jsonify({'message': 'Send me something'})
